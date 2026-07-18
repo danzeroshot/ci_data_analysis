@@ -1,0 +1,7 @@
+{
+  "balanced_accuracy": 0.6504608176294923,
+  "feature_count": 4188,
+  "macro_f1": 0.6372913801935884,
+  "test_rows": 694,
+  "train_rows": 2775
+}
