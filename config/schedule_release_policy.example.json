@@ -1,0 +1,12 @@
+{
+  "schema_version": "schedule-release-policy-v1",
+  "metric_thresholds": {
+    "minimum_macro_f1": null,
+    "minimum_significant_delay_recall": null,
+    "minimum_balanced_accuracy": null,
+    "maximum_calibration_error": null
+  },
+  "maximum_train_to_holdout_macro_f1_gap": null,
+  "minimum_subgroup_support": 20,
+  "allowable_incumbent_regression": null
+}

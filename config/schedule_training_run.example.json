@@ -1,0 +1,63 @@
+{
+  "schema_version": "schedule-training-run-v1",
+  "run_name": "schedule-rf-development",
+  "random_seed": 42,
+  "training_snapshot": {
+    "path": "feature_snapshots/snapshots/schedule-features-20260718T140401Z-fa9eac7d/features.parquet",
+    "manifest_path": "feature_snapshots/snapshots/schedule-features-20260718T140401Z-fa9eac7d/manifest.json"
+  },
+  "labels": {
+    "path": "training_snapshots/labels/REPLACE_WITH_BUILD_ID/labels.parquet",
+    "manifest_path": "training_snapshots/labels/REPLACE_WITH_BUILD_ID/manifest.json"
+  },
+  "target_definition_version": "schedule-delay-v1",
+  "feature_policy": {
+    "manifest_path": "config/schedule_candidate_features.json",
+    "maximum_missing_rate": 0.95,
+    "minimum_non_null_count": 50,
+    "drop_zero_variance": true,
+    "drop_duplicate_vectors": true
+  },
+  "selection": {
+    "significant_delay_weight": 0.35,
+    "primary_metric": "weighted_macro_f1_significant_recall"
+  },
+  "tuning": {
+    "strategy": "randomized_search",
+    "iterations": 5,
+    "cross_validation_folds": 3,
+    "n_estimators": [250],
+    "max_depth": [6, 8, 12],
+    "min_samples_leaf": [10, 15, 25],
+    "min_samples_split": [10, 20],
+    "max_features": ["sqrt", 0.05, 0.1],
+    "max_samples": [0.7, 0.85],
+    "class_weight": ["balanced", "balanced_subsample"],
+    "criterion": ["gini", "entropy"],
+    "missing_indicators": [false]
+  },
+  "splits": {
+    "locked_holdout_fraction": 0.2,
+    "temporal_test_fraction": 0.2,
+    "split_seed": 42,
+    "minimum_class_support": 2,
+    "minimum_customer_rows": 20,
+    "minimum_customer_class_support": 2,
+    "run_temporal_test": true,
+    "temporal_date_column": "PLANNEDSTARTDATE",
+    "run_customer_tests": true
+  },
+  "resources": {
+    "model_n_jobs": -1,
+    "maximum_concurrent_candidates": 1,
+    "bootstrap_iterations": 1000,
+    "benchmark_mode": false
+  },
+  "reporting": {
+    "generate_html": true,
+    "top_candidate_count": 20,
+    "calibration_bins": 10
+  },
+  "release_policy_path": "config/schedule_release_policy.example.json",
+  "output_root": "model_artifacts/schedule-risk"
+}
