@@ -46,8 +46,10 @@ class Settings:
     feature_snapshot_root: Path
     feature_sql_path: Path
     feature_schema_path: Path
+    model_bundle_path: Optional[Path]
     model_path: Path
     model_card_path: Path
+    customer_model_root: Path
     max_feature_age_hours: int
     max_batch_size: int
     snapshot_check_interval_seconds: int
@@ -77,11 +79,15 @@ class Settings:
             feature_schema_path=Path(os.getenv(
                 "FEATURE_SCHEMA_PATH", ROOT / "models/schedule_risk_feature_schema.json"
             )),
+            model_bundle_path=(Path(os.environ["MODEL_BUNDLE_PATH"]) if os.getenv("MODEL_BUNDLE_PATH") else None),
             model_path=Path(os.getenv(
                 "MODEL_PATH", ROOT / "models/schedule_risk_model.joblib"
             )),
             model_card_path=Path(os.getenv(
                 "MODEL_CARD_PATH", ROOT / "models/schedule_risk_model_card.json"
+            )),
+            customer_model_root=Path(os.getenv(
+                "CUSTOMER_MODEL_ROOT", ROOT / "model_artifacts/schedule-risk/customer-releases"
             )),
             max_feature_age_hours=int(os.getenv("MAX_FEATURE_AGE_HOURS", "24")),
             max_batch_size=int(os.getenv("MAX_BATCH_SIZE", "500")),

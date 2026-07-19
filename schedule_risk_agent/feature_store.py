@@ -58,7 +58,7 @@ class LocalFeaturePublisher:
         writer = None
         rows_written = 0
         try:
-            projection_columns = ["CUSTOMERNAME", "PROJECTID", "FEATUREASOFUTC", "FEATURESCHEMAVERSION", "KEYWORDMANIFESTVERSION"] + self.schema.ordered_features
+            projection_columns = ["CUSTOMERNAME", "PROJECTID", "FEATUREASOFUTC", "FEATURESCHEMAVERSION", "KEYWORDMANIFESTVERSION", "PLANNEDSTARTDATE"] + self.schema.ordered_features
             projection = ", ".join("\"{}\"".format(name) for name in projection_columns)
             cursor.execute("SELECT " + projection + " FROM " + table_name + " ORDER BY CustomerName, ProjectID")
             columns = [item[0] for item in cursor.description]
@@ -72,6 +72,7 @@ class LocalFeaturePublisher:
                 frame["CUSTOMERNAME"] = frame["CUSTOMERNAME"].astype(str)
                 frame["PROJECTID"] = frame["PROJECTID"].astype(str)
                 frame["FEATUREASOFUTC"] = pd.to_datetime(frame["FEATUREASOFUTC"], utc=True)
+                frame["PLANNEDSTARTDATE"] = pd.to_datetime(frame["PLANNEDSTARTDATE"], errors="coerce")
                 table = pa.Table.from_pandas(frame, preserve_index=False)
                 if writer is None:
                     writer = pq.ParquetWriter(str(parquet_path), table.schema, compression="zstd")

@@ -165,11 +165,13 @@ The generic term `risk_score` should not be used unless a later calibrated busin
 Training code is present in the same image but is not reachable through the public MCP tool.
 
 ```text
-python -m schedule_risk_agent.train
-python -m schedule_risk_agent.evaluate
+python -m schedule_risk_agent.training_pipeline run --config <run.json>
+python -m schedule_risk_agent.training_pipeline evaluate --bundle <release> --data <test>
 ```
 
-The training command requires a separately authorized Snowflake role/token and writes model artifacts to a controlled output volume or model registry. The inference container should mount released artifacts read-only.
+The training command requires a separately authorized Snowflake role/token and writes immutable, versioned model artifacts to a controlled filesystem artifact root. A future model registry may replace that storage adapter without changing the bundle contract. The inference container mounts a promoted release read-only.
+
+`schedule_risk_model_training_pipeline_architecture.md` is authoritative for feature qualification, regularized random-forest tuning, metric capture, filesystem release, and offline comparison to the captured training state.
 
 ## 5. Snowflake Feature Store
 
@@ -450,7 +452,7 @@ Startup sequence:
 The same image is run with a different command and a writable artifact output mount:
 
 ```yaml
-command: ["python", "-m", "schedule_risk_agent.train"]
+command: ["python", "-m", "schedule_risk_agent.training_pipeline", "run", "--config", "/app/config/training-run.json"]
 ```
 
 Training is not a long-running service and is not exposed on port 8011.
@@ -464,6 +466,11 @@ schedule_risk_model.joblib
 schedule_risk_feature_schema.json
 schedule_risk_model_card.json
 schedule_risk_training_metrics.json
+selected_hyperparameters.json
+reference_metrics.json
+feature_reference_profile.parquet
+prediction_reference_profile.json
+histogram_definitions.json
 requirements.lock
 checksums.sha256
 ```
@@ -471,6 +478,8 @@ checksums.sha256
 Model activation is a container/image release, not an in-place file overwrite. Rollback deploys the prior image/artifact version.
 
 ## 12. Training Architecture
+
+This section summarizes the runtime-facing training contract. `schedule_risk_model_training_pipeline_architecture.md` is authoritative for training inputs, feature qualification, split isolation, hyperparameter tuning, detailed metrics, release gates, versioned filesystem artifacts, and later comparison against the training reference state.
 
 ### 12.1 Target
 
@@ -501,6 +510,16 @@ The target definition remains a design-review item because actual start is proxi
 8. Fit the released pipeline on the approved training population.
 9. Serialize artifacts and write a model card.
 10. Run an inference-parity test against the current feature-extraction code.
+
+Random-forest candidates are selected using the configured significant-delay weighting parameter:
+
+```text
+selection_score =
+    (1 - significant_delay_weight) * macro_f1
+    + significant_delay_weight * recall_significant_delay
+```
+
+At `0`, selection is based entirely on macro F1. At `1`, selection is based entirely on avoiding missed `significant_delay` cases through significant-delay recall. Final holdout, temporal, and customer-isolation test populations never participate in candidate selection.
 
 ### 12.3 Mandatory Parity Test
 
@@ -601,6 +620,14 @@ The SQL contains deployment placeholders such as `<ANALYTICS_DATABASE>` and role
 - Model class mapping and probability sum.
 - Deterministic model loading and artifact checksum validation.
 
+### Training Pipeline Tests
+
+- Feature qualification and leakage rejection.
+- Stable holdout and cross-validation split determinism.
+- Weighted selection objective behavior at `0`, intermediate values, and `1`.
+- Final holdout isolation and train/test comparison calculations.
+- Serialization parity, release-gate enforcement, atomic promotion, and rollback.
+
 ### Integration Tests
 
 - Container-to-Snowflake connection with a short-lived test token.
@@ -620,12 +647,14 @@ The SQL contains deployment placeholders such as `<ANALYTICS_DATABASE>` and role
 6. Add optional history and confirm three-month retention behavior.
 7. Implement repository and schema-adapter code.
 8. Capture an immutable training snapshot from the production-safe calculation.
-9. Retrain and evaluate the three-bin model.
-10. Package signed/versioned model artifacts in the container.
-11. Implement MCP tool and error contracts.
-12. Run concurrency, freshness, security, and swap integration tests.
-13. Connect the external six-hour scheduler.
-14. Conduct design review and production-readiness review.
+9. Implement the detailed feature-qualification, tuning, evaluation, and release pipeline.
+10. Tune and evaluate the three-bin model, preserving final holdout and stress-test isolation.
+11. Release a verified, versioned filesystem bundle with complete reference metrics.
+12. Package the promoted model bundle read-only in the inference container.
+13. Implement MCP tool and error contracts.
+14. Run training parity, concurrency, freshness, security, and swap integration tests.
+15. Connect the external six-hour scheduler.
+16. Conduct design review and production-readiness review.
 
 ## 18. Remaining Review Items
 
@@ -637,4 +666,7 @@ The SQL contains deployment placeholders such as `<ANALYTICS_DATABASE>` and role
 - Set customer-coverage and row-count drift thresholds for refresh validation.
 - Define immutable training-snapshot retention and model-governance policy.
 - Decide whether class probabilities require calibration before client presentation.
+- Set the default `significant_delay_weight` used for candidate selection.
+- Set minimum release metrics and allowable regressions relative to the incumbent release.
+- Define filesystem artifact retention, backup, approval, promotion, and rollback policy.
 
