@@ -7,7 +7,7 @@ from pathlib import Path
 from .configuration import load_run_config
 from .feature_qualification import generate_feature_manifest
 from .release import promote_customer_bundle, promote_run, rollback_release
-from .snapshots import create_label_snapshot_from_csv
+from .snapshots import create_label_snapshot_from_csv, create_label_snapshot_from_snowflake
 from .stages import compare_bundle, run_pipeline
 
 
