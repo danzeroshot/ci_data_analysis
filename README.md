@@ -305,11 +305,51 @@ The response includes the all-customer result and, when available, the customer-
 
 ## Docker
 
-Build the image:
+Docker Compose exposes three independent, opt-in workflows using the same image:
 
-    docker compose -f docker-compose.schedule-risk.yml build
+- `schedule-risk-training`: one-shot training with read-only input snapshots and
+  a writable host artifact directory;
+- `schedule-risk-feature-refresh`: one-shot Snowflake refresh into the host
+  feature snapshot directory; and
+- `schedule-risk-agent`: long-running MCP inference with read-only feature and
+  model mounts and no Snowflake credential.
 
-Start the MCP service:
+Set the host identity before running any Compose workflow. The writers keep
+generated files owned by the invoking user, and MCP can read their private
+snapshot directories:
+
+    export SCHEDULE_RISK_HOST_UID="$(id -u)"
+    export SCHEDULE_RISK_HOST_GID="$(id -g)"
+
+Build the shared image (the services are opt-in profiles, so select one service
+explicitly):
+
+    docker compose -f docker-compose.schedule-risk.yml build schedule-risk-agent
+
+Run feature qualification only:
+
+    docker compose -f docker-compose.schedule-risk.yml run --rm \
+      schedule-risk-training python -m schedule_risk_agent.training_pipeline \
+      qualify --config config/schedule_training_run.development.json
+
+Run the complete training pipeline:
+
+    docker compose -f docker-compose.schedule-risk.yml run --rm \
+      schedule-risk-training
+
+Training reads `config/`, `feature_snapshots/`, and `training_snapshots/`
+read-only and writes new runs below `model_artifacts/`.
+
+Refresh the local feature snapshot from Snowflake before starting MCP when the
+current snapshot is missing or older than `MAX_FEATURE_AGE_HOURS`:
+
+    docker compose -f docker-compose.schedule-risk.yml run --rm \
+      schedule-risk-feature-refresh
+
+The refresh process receives the local Snowflake config and PAT as Compose
+secrets. The MCP process never mounts either secret.
+
+Start only the MCP service:
 
     docker compose -f docker-compose.schedule-risk.yml up -d schedule-risk-agent
 
@@ -317,21 +357,18 @@ View logs:
 
     docker compose -f docker-compose.schedule-risk.yml logs -f schedule-risk-agent
 
-The compose file maps the MCP port to host port 8011:
+The compose file binds the MCP port to loopback host port 8011 by default:
 
     http://127.0.0.1:8011
 
-The current compose service uses the baseline model files under /app/models. For released bundles, configure MODEL_BUNDLE_PATH and mount the release directory read-only. For customer-specific releases, configure CUSTOMER_MODEL_ROOT and mount the customer release root read-only.
+The MCP service uses baseline files under `/app/models` unless
+`SCHEDULE_RISK_MODEL_BUNDLE_PATH` is set to a container path below the mounted
+`/app/model_artifacts`, for example:
 
-Run the feature refresh service:
+    export SCHEDULE_RISK_MODEL_BUNDLE_PATH=/app/model_artifacts/schedule-risk/releases/<model-version>
 
-    docker compose -f docker-compose.schedule-risk.yml run --rm schedule-risk-feature-refresh
-
-The refresh service expects SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_ROLE, and SNOWFLAKE_WAREHOUSE from the host environment. It reads the token through the Docker secret configured as:
-
-    ./schedule_model_dev-token-secret.txt
-
-The feature-refresh and MCP services share the schedule-risk-features volume. The refresh service writes it; the MCP service reads it read-only.
+Customer release pointers are read from the mounted
+`/app/model_artifacts/schedule-risk/customer-releases` directory.
 
 Docker is not production-ready until released model/customer bundles, secret-manager integration, persistent feature-table refresh permissions, health/resource/network policies, and rollback procedures are validated.
 

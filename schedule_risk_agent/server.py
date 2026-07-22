@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict
 
 from .config import Settings
@@ -57,7 +59,12 @@ except ScheduleRiskError:
 
 
 def repository_ready() -> bool:
-    return repository._frame is not None
+    try:
+        ensure_repository()
+        repository.fetch([])
+        return True
+    except Exception:
+        return False
 
 
 def ensure_repository() -> None:
@@ -156,4 +163,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

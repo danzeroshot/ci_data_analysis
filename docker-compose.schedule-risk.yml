@@ -1,0 +1,108 @@
+x-schedule-risk-image: &schedule-risk-image
+  image: aurigo/schedule-risk-agent:dev
+  build:
+    context: .
+    dockerfile: docker/schedule-risk-agent.Dockerfile
+
+x-host-process-environment: &host-process-environment
+  HOME: /tmp
+  MPLCONFIGDIR: /tmp/matplotlib
+  PYTHONPATH: /app
+
+services:
+  # Long-running inference process. It receives no Snowflake credentials and
+  # reads feature/model artifacts through read-only bind mounts.
+  schedule-risk-agent:
+    <<: *schedule-risk-image
+    profiles: ["mcp"]
+    user: "${SCHEDULE_RISK_HOST_UID:-1000}:${SCHEDULE_RISK_HOST_GID:-1000}"
+    command: ["python", "-m", "schedule_risk_agent.server"]
+    init: true
+    ports:
+      - "127.0.0.1:${SCHEDULE_RISK_MCP_PORT:-8011}:8011"
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8011"
+      FEATURE_REPOSITORY: "local"
+      FEATURE_SNAPSHOT_ROOT: "/var/lib/schedule-risk/features"
+      MAX_FEATURE_AGE_HOURS: "${MAX_FEATURE_AGE_HOURS:-24}"
+      MODEL_BUNDLE_PATH: "${SCHEDULE_RISK_MODEL_BUNDLE_PATH:-}"
+      MODEL_PATH: "/app/models/schedule_risk_model.joblib"
+      FEATURE_SCHEMA_PATH: "/app/models/schedule_risk_feature_schema.json"
+      MODEL_CARD_PATH: "/app/models/schedule_risk_model_card.json"
+      CUSTOMER_MODEL_ROOT: "/app/model_artifacts/schedule-risk/customer-releases"
+    volumes:
+      - ./feature_snapshots:/var/lib/schedule-risk/features:ro
+      - ./model_artifacts:/app/model_artifacts:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/health/ready', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  # One-shot feature refresh. Host UID/GID variables keep bind-mounted
+  # snapshots owned by the invoking host user instead of root.
+  schedule-risk-feature-refresh:
+    <<: *schedule-risk-image
+    profiles: ["refresh"]
+    user: "${SCHEDULE_RISK_HOST_UID:-1000}:${SCHEDULE_RISK_HOST_GID:-1000}"
+    command: ["python", "-m", "schedule_risk_agent.feature_refresh", "--target", "local"]
+    init: true
+    environment:
+      <<: *host-process-environment
+      FEATURE_SNAPSHOT_ROOT: "/var/lib/schedule-risk/features"
+      SNOWFLAKE_CONFIG_FILE: "/run/secrets/snowflake_config"
+      SNOWFLAKE_TOKEN_FILE: "/run/secrets/snowflake_pat"
+      FEATURE_SCHEMA_PATH: "/app/models/schedule_risk_feature_schema.json"
+    secrets:
+      - snowflake_config
+      - snowflake_pat
+    volumes:
+      - ./feature_snapshots:/var/lib/schedule-risk/features
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  # One-shot full training pipeline. Override the command with qualify or tune
+  # when a shorter stage-specific run is desired.
+  schedule-risk-training:
+    <<: *schedule-risk-image
+    profiles: ["training"]
+    user: "${SCHEDULE_RISK_HOST_UID:-1000}:${SCHEDULE_RISK_HOST_GID:-1000}"
+    working_dir: /workspace
+    command:
+      - python
+      - -m
+      - schedule_risk_agent.training_pipeline
+      - run
+      - --config
+      - config/schedule_training_run.development.json
+    init: true
+    environment:
+      <<: *host-process-environment
+    volumes:
+      - ./config:/workspace/config:ro
+      - ./feature_snapshots:/workspace/feature_snapshots:ro
+      - ./training_snapshots:/workspace/training_snapshots:ro
+      - ./model_artifacts:/workspace/model_artifacts
+      - ./requirements.lock:/workspace/requirements.lock:ro
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+secrets:
+  snowflake_config:
+    file: ./snowflake_access_config.txt.txt
+  snowflake_pat:
+    file: ./schedule_model_dev-token-secret.txt

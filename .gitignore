@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+logs/
+snowflake_access_config.txt.txt
+schedule_model_dev-token-secret.txt

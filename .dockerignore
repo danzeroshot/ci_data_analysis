@@ -1,0 +1,12 @@
+*
+
+!requirements.lock
+!schedule_risk_agent/
+!schedule_risk_agent/**
+!models/
+!models/**
+!docker/
+!docker/schedule-risk-agent.Dockerfile
+!schedule_risk_feature_calculation.sql
+!schedule_risk_feature_store_refresh_current.sql
+!schedule_risk_label_calculation.sql
